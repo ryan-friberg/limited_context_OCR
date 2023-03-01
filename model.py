@@ -28,6 +28,9 @@ class Extractor():
         self.label_map = label_map
         self.out_shape = out_shape
 
+    # use Google Tesseract to extrapolate bounding boxes around each character in an image
+    # Tesseract also supplies its guess for the character in the box, which is used as a pseudo-label
+    # system within the OCR pipeline
     def forward(self, img_name):
         labels, imgs = [], []
         img = Image.open(img_name)
@@ -36,6 +39,7 @@ class Extractor():
         if len(boxes) == 0:
             return
         
+        # extract the coordinates of the each bounding box found in the image
         for box in boxes.splitlines():
             vals = box.split(' ')
             if vals[0] not in self.label_map.values():
@@ -44,8 +48,12 @@ class Extractor():
             x, y, w, h = int(vals[1]), int(vals[2]), int(vals[3]), int(vals[4])
             cropped = img.crop((x, hImg-h, w, hImg-y))
             w2, h2 = cropped.size
+
+            # add some white pixel padding around the image
             padded = Image.new(cropped.mode, (w2+10, h2+10), (255, 255, 255))
             padded.paste(cropped, (5,5))
+
+            # match the output shape to the expected input shape of the OCRResNet
             char_img = padded.resize((self.out_shape, self.out_shape))
             imgs.append(char_img)
         return labels, imgs
@@ -72,7 +80,7 @@ class Block(nn.Module):
     def forward(self, input):
         return F.relu(self.layers(input) + self.downsample_layer(input))
     
-
+# Simple ResNet model based off of the paper Deep Residual Learning for Image Recognition
 class OCRResNet(nn.Module):
     def __init__(self, num_classes=62):
         super(OCRResNet, self).__init__()
@@ -119,10 +127,9 @@ def trainOCR(model, epoch, trainloader, optim, device, criterion):
         train_loss += loss.item()
         _, preds = torch.max(outputs, 1)
         total += labels.size(0)
-        # correct += preds.eq(labels).sum().item()
         correct += torch.sum(preds == labels.data)
     end = time.perf_counter()
-    print("Training", epoch, "time: %.3f" % (end-start), 'Loss: %.3f | Acc: %.3f%% (%d/%d)' % 
+    print("Training", epoch, "time: %.3f" % (end-start), 'Loss: %.3f Acc: %.3f (%d/%d)' % 
           (train_loss/(batch_idx+1), correct/total, correct, total))
 
 def testOCR(model, epoch, testloader, device, criterion, optim_name):
@@ -140,10 +147,9 @@ def testOCR(model, epoch, testloader, device, criterion, optim_name):
             test_loss += loss.item()
             _, preds = torch.max(outputs, 1)
             total += labels.size(0)
-            # correct += preds.eq(labels).sum().item()
             correct += torch.sum(preds == labels.data)
 
-        print('Test Loss: %.3f | Acc: %.3f%% (%d/%d)' % (test_loss/(batch_idx+1), correct/total, correct, total))
+        print('Test Loss: %.3f Acc: %.3f (%d/%d)' % (test_loss/(batch_idx+1), correct/total, correct, total))
         print('Saving model...')
         state = {'model': model.state_dict(), 'acc': 100.*correct/total, 'epoch': epoch}
         if not os.path.isdir('model_checkpoint'):

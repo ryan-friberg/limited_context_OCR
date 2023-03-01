@@ -2,16 +2,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
-from PIL import Image
-import matplotlib.pyplot as plt
-import torchvision
-from torchvision import datasets, transforms
-import os
-import glob
-import itertools
+from torchvision import transforms
 import argparse
 from torchvision.io import read_image
-import pytesseract
 # import torchsummary
 from model import label_map
 
@@ -19,7 +12,6 @@ from datasets import OCRDataSet, collate_fn
 from model import OCRResNet, trainOCR, testOCR
 
 cudnn.benchmark = True
-pytesseract.pytesseract.tesseract_cmd = r'/usr/local/bin/tesseract'
 
 parser = argparse.ArgumentParser(description='PyTorch OCR Training')
 parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
@@ -33,12 +25,7 @@ parser.add_argument('--load', default='', type=str, help='load model checkpoint'
 def main():
     # multi_path = "data/multiple"
     single_path = "data/single/Img"
-
     args = parser.parse_args()
-
-    # convert training data to a tensor, model, + TODO ADD MORE TRANSFROMS
-    # RandomGrayscale([p])
-    # RandomAdjustSharpness(sharpness_factor[, p])
 
     data_transforms = transforms.Compose([transforms.ToTensor(),
                                         #   transforms.Resize(3,64,64),
@@ -50,7 +37,7 @@ def main():
     OCR_model = OCRResNet()
     # torchsummary.summary(OCR_model, (3, 64, 64))
 
-    # determine which device to run the model on
+    # check if requested GPU is available
     print("==> Configuring device...")
     if args.device == 'cuda':
         print("Checking for GPU...")
@@ -66,12 +53,14 @@ def main():
         device = 'cpu'
     OCR_model.to(device)
     
+    # load a pre-trained if need be
+    start = 0
     if args.load != '': # model needs to be loaded to the same device it was saved from
         print('==> Loading checkpoint...')
         checkpoint = torch.load(args.load)
         OCR_model.load_state_dict(checkpoint['model'])
-        acc = checkpoint['acc']
-        start = checkpoint['epoch']
+        acc = checkpoint['acc'] # ended up being unused
+        start = checkpoint['epoch'] + 1
 
     # define loss function
     criterion = nn.CrossEntropyLoss()

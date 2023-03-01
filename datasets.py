@@ -2,11 +2,9 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
-from torchvision import datasets, transforms
 import os
 import glob
 import itertools
-from torchvision.io import read_image
 
 ### OCR Custom dataset
 class OCRDataSet(Dataset):
@@ -60,6 +58,34 @@ class OCRDataSet(Dataset):
             image_files += image_class_files
             labels += [int(name)] * len(image_class_files)
         return image_files, labels
+
+
+class MultiDataSet():
+    def __init__(self, images_dir, transforms):
+        self.image_transforms = transforms
+        image_files = self.get_image_filenames_with_labels(images_dir)       
+        self.image_files = np.array(image_files)
+        self.num_images = len(self.image_files)
+        
+    def __getitem__(self, idx):
+        try:
+            img = Image.open(self.image_files[idx]).convert('RGB')
+            return self.image_transforms(img)
+        except:
+            return None
+        
+    def __len__(self):
+        return self.num_images
+    
+    def get_image_filenames_with_labels(self, images_dir):
+        image_files = []
+        files = os.listdir(images_dir)
+        for name in files:
+            if name == ".DS_Store":
+                continue
+            image_files.append(images_dir + '/' + name)
+        return image_files
+
 
 def collate_fn(batch):
     # Filter failed images first
