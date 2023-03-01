@@ -43,20 +43,22 @@ class OCRResNet(nn.Module):
         self.block3 = nn.Sequential(Block(128, 256, 2),
                                     Block(256, 256, 1))
         self.block3 = nn.Sequential(Block(128, 512, 2))
-        self.pool   = nn.AvgPool2d(4)     
-        self.linear = nn.Linear(8192, num_classes)
+        self.pool   = nn.AvgPool2d(8)
+        self.linear = nn.Linear(4096, num_classes)
         
         self.layers = nn.Sequential(self.conv, self.block1, self.block2, 
                                     self.block3, self.pool)
 
     def forward(self, input):
         output = self.layers(input)
-        return self.linear(output.view(output.size(0), -1))
+        return output.view(output.size(0), -1)
+        
     
 def trainOCR(model, epoch, trainloader, optim, device, criterion):
     print("Beginning traing epoch", epoch)
     train_loss = 0
     correct = 0
+    total = 0
     start = time.perf_counter()
     model.train()
     for batch_idx, (inputs, targets) in enumerate(trainloader):

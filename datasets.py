@@ -28,12 +28,11 @@ class OCRDataSet(Dataset):
         
     def __getitem__(self, idx):
         try:
-            # print(self.image_files[idx])
             image = Image.open(self.image_files[idx]).convert('RGB')
+            if image.size != (64,64):
+                image = image.resize((64,64)) 
             label = self.labels[idx]
             image = self.image_transforms(image)
-            # if image.shape != torch.Size([3, 64, 64]):
-            #     image.resize((3,64,64))
             return image, label
         except:
             return None

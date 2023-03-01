@@ -12,7 +12,7 @@ import itertools
 import argparse
 from torchvision.io import read_image
 import pytesseract
-import torchsummary
+# import torchsummary
 
 from datasets import OCRDataSet, collate_fn
 from model import OCRResNet, trainOCR, testOCR
@@ -55,14 +55,15 @@ def main():
     # RandomAdjustSharpness(sharpness_factor[, p])
 
     data_transforms = transforms.Compose([transforms.ToTensor(),
-                                          transforms.Resize(3,64,64),
-                                          transforms.Grayscale(0.4),
+                                        #   transforms.Resize(3,64,64),
+                                        #   transforms.Grayscale(0.4),
                                           transforms.RandomAdjustSharpness(1.5, 0.3),
                                           transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
 
     # define ResNet model
     OCR_model = OCRResNet()
-    torchsummary.summary(OCR_model, (3, 64, 64))
+    # torchsummary.summary(OCR_model, (3, 64, 64))
+
     # determine which device to run the model on
     print("==> Configuring device...")
     if args.device == 'cuda':
