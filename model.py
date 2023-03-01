@@ -107,22 +107,23 @@ def trainOCR(model, epoch, trainloader, optim, device, criterion):
     total = 0
     start = time.perf_counter()
     model.train()
-    for batch_idx, (inputs, targets) in enumerate(trainloader):
-        inputs, targets = inputs.to(device), targets.to(device)
+    for batch_idx, (inputs, labels) in enumerate(trainloader):
+        inputs, labels = inputs.to(device), labels.to(device)
         optim.zero_grad()
         outputs = model(inputs)
         
-        loss = criterion(outputs, targets)
+        loss = criterion(outputs, labels)
         loss.backward()
         optim.step()
 
         train_loss += loss.item()
-        _, predicted = outputs.max(1)
-        total += targets.size(0)
-        correct += predicted.eq(targets).sum().item()
+        _, preds = torch.max(outputs, 1)
+        total += labels.size(0)
+        # correct += preds.eq(labels).sum().item()
+        correct += torch.sum(preds == labels.data)
     end = time.perf_counter()
     print("Training", epoch, "time: %.3f" % (end-start), 'Loss: %.3f | Acc: %.3f%% (%d/%d)' % 
-          (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
+          (train_loss/(batch_idx+1), correct/total, correct, total))
 
 def testOCR(model, epoch, testloader, device, criterion, optim_name):
     print("\nTesting...") 
@@ -131,17 +132,18 @@ def testOCR(model, epoch, testloader, device, criterion, optim_name):
     correct = 0
     total = 0
     with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(testloader):
-            inputs, targets = inputs.to(device), targets.to(device)
+        for batch_idx, (inputs, labels) in enumerate(testloader):
+            inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
-            loss = criterion(outputs, targets)
+            loss = criterion(outputs, labels)
 
             test_loss += loss.item()
-            _, predicted = outputs.max(1)
-            total += targets.size(0)
-            correct += predicted.eq(targets).sum().item()
+            _, preds = torch.max(outputs, 1)
+            total += labels.size(0)
+            # correct += preds.eq(labels).sum().item()
+            correct += torch.sum(preds == labels.data)
 
-        print('Test Loss: %.3f | Acc: %.3f%% (%d/%d)' % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
+        print('Test Loss: %.3f | Acc: %.3f%% (%d/%d)' % (test_loss/(batch_idx+1), correct/total, correct, total))
         print('Saving model...')
         state = {'model': model.state_dict(), 'acc': 100.*correct/total, 'epoch': epoch}
         if not os.path.isdir('model_checkpoint'):
