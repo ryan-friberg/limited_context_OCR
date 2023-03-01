@@ -4,6 +4,51 @@ import torch.nn as nn
 import torch.nn.functional as F
 import time
 import os
+import pytesseract
+from PIL import Image
+
+pytesseract.pytesseract.tesseract_cmd = r'/usr/local/bin/tesseract'
+
+label_map = {1: "0", 2: "1", 3: "2", 4: "3", 5: "4",
+                6: "5", 7: "6", 8: "7", 9: "8", 10: "9",
+                11: "A", 12: "B", 13: "C", 14: "D", 15: "E",
+                16: "F", 17: "G", 18: "H", 19: "I", 20: "J",
+                21: "K", 22: "L", 23: "M", 24: "N", 25: "O",
+                26: "P", 27: "Q", 28: "R", 29: "S", 30: "T",
+                31: "U", 32: "V", 33: "W", 34: "X", 35: "Y",
+                36: "Z", 37: "a", 38: "b", 39: "c", 40: "d",
+                41: "e", 42: "f", 43: "g", 44: "h", 45: "i",
+                46: "j", 47: "k", 48: "l", 49: "m", 50: "n",
+                51: "o", 52: "p", 53: "q", 54: "r", 55: "s",
+                56: "t", 57: "u", 58: "v", 59: "w", 60: "x",
+                61: "y", 62: "z"}
+
+class Extractor():
+    def __init__(self, label_map, out_shape):
+        self.label_map = label_map
+        self.out_shape = out_shape
+
+    def forward(self, img_name):
+        labels, imgs = [], []
+        img = Image.open(img_name)
+        wImg, hImg = img.size
+        boxes = pytesseract.image_to_boxes(img)
+        if len(boxes) == 0:
+            return
+        
+        for box in boxes.splitlines():
+            vals = box.split(' ')
+            if vals[0] not in self.label_map.values():
+                continue
+            labels.append(vals[0])
+            x, y, w, h = int(vals[1]), int(vals[2]), int(vals[3]), int(vals[4])
+            cropped = img.crop((x, hImg-h, w, hImg-y))
+            w2, h2 = cropped.size
+            padded = Image.new(cropped.mode, (w2+10, h2+10), (255, 255, 255))
+            padded.paste(cropped, (5,5))
+            char_img = padded.resize((self.out_shape, self.out_shape))
+            imgs.append(char_img)
+        return labels, imgs
 
 ## simple implementation of a residual network
 class Block(nn.Module):
@@ -26,6 +71,7 @@ class Block(nn.Module):
 
     def forward(self, input):
         return F.relu(self.layers(input) + self.downsample_layer(input))
+    
 
 class OCRResNet(nn.Module):
     def __init__(self, num_classes=62):
@@ -52,10 +98,10 @@ class OCRResNet(nn.Module):
     def forward(self, input):
         output = self.layers(input)
         return output.view(output.size(0), -1)
-        
-    
+
+
 def trainOCR(model, epoch, trainloader, optim, device, criterion):
-    print("Beginning traing epoch", epoch)
+    print("Beginning training epoch", epoch)
     train_loss = 0
     correct = 0
     total = 0
@@ -75,13 +121,11 @@ def trainOCR(model, epoch, trainloader, optim, device, criterion):
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
     end = time.perf_counter()
-    # log = "Training Epoch: %d - Runtime: %.3f - Loss: %.3f - Acc: %.3f  - Precision %.3f - Recall %.3f - F1 %.3f"
-    # metrics = "TP: %d - TN %d - FP %d - FN"
     print("Training", epoch, "time: %.3f" % (end-start), 'Loss: %.3f | Acc: %.3f%% (%d/%d)' % 
           (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
-def testOCR(model, epoch, testloader, best_acc, device, criterion):
-    print("\nTesting...")
+def testOCR(model, epoch, testloader, device, criterion, optim_name):
+    print("\nTesting...") 
     model.eval()
     test_loss = 0
     correct = 0
@@ -97,13 +141,10 @@ def testOCR(model, epoch, testloader, best_acc, device, criterion):
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
-            print('Test Loss: %.3f | Acc: %.3f%% (%d/%d)' % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
-
-    acc = 100.*correct/total
-    if acc > best_acc:
-        print('Saving..')
-        state = {'model': model.state_dict(), 'acc': acc, 'epoch': epoch}
+        print('Test Loss: %.3f | Acc: %.3f%% (%d/%d)' % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
+        print('Saving model...')
+        state = {'model': model.state_dict(), 'acc': 100.*correct/total, 'epoch': epoch}
         if not os.path.isdir('model_checkpoint'):
             os.mkdir('model_checkpoint')
-        torch.save(state, './checkpoint/ckpt.pth')
-        best_acc = acc
+        checkpoint_name = optim_name + 'chpkt' + str(epoch) + '.pth'
+        torch.save(state, checkpoint_name)

@@ -13,6 +13,7 @@ import argparse
 from torchvision.io import read_image
 import pytesseract
 # import torchsummary
+from model import label_map
 
 from datasets import OCRDataSet, collate_fn
 from model import OCRResNet, trainOCR, testOCR
@@ -26,27 +27,12 @@ parser.add_argument('--device', default='cpu', type=str, help='cpu or cuda')
 parser.add_argument('--optim', default='sgd', type=str, help='training optimizer: sgd, sgd_nest, adagrad, adadelta, or adam')
 parser.add_argument('--num_workers', default=0, type=int, help='number of workers')
 parser.add_argument('--train_split', default=0.75, type=float, help='percentage of dataset to be used for training')
-# parser.add_argument('--data_path', default='./data', type=str, help='location of data')
 parser.add_argument('--epochs', default=5, type=int, help='numper of training epochs')
-parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
+parser.add_argument('--load', default='', type=str, help='load model checkpoint')
 
 def main():
     # multi_path = "data/multiple"
     single_path = "data/single/Img"
-
-    label_map = {1: "0", 2: "1", 3: "2", 4: "3", 5: "4",
-                6: "5", 7: "6", 8: "7", 9: "8", 10: "9",
-                11: "A", 12: "B", 13: "C", 14: "D", 15: "E",
-                16: "F", 17: "G", 18: "H", 19: "I", 20: "J",
-                21: "K", 22: "L", 23: "M", 24: "N", 25: "O",
-                26: "P", 27: "Q", 28: "R", 29: "S", 30: "T",
-                31: "U", 32: "V", 33: "W", 34: "X", 35: "Y",
-                36: "Z", 37: "a", 38: "b", 39: "c", 40: "d",
-                41: "e", 42: "f", 43: "g", 44: "h", 45: "i",
-                46: "j", 47: "k", 48: "l", 49: "m", 50: "n",
-                51: "o", 52: "p", 53: "q", 54: "r", 55: "s",
-                56: "t", 57: "u", 58: "v", 59: "w", 60: "x",
-                61: "y", 62: "z"}
 
     args = parser.parse_args()
 
@@ -80,13 +66,20 @@ def main():
         device = 'cpu'
     OCR_model.to(device)
     
+    if args.load != '': # model needs to be loaded to the same device it was saved from
+        print('==> Loading checkpoint...')
+        checkpoint = torch.load(args.load)
+        OCR_model.load_state_dict(checkpoint['model'])
+        acc = checkpoint['acc']
+        start = checkpoint['epoch']
+
     # define loss function
     criterion = nn.CrossEntropyLoss()
 
     # pick the model from the arguments
     if args.optim == 'sgd':
         print("==> SGD")
-        optim = torch.optim.SGD(OCR_model.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
+        optim = torch.optim.SGD(OCR_model.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4) # values suggested from another class' assignment
     if args.optim == 'sgd_nest':
         print("==> SGD w/ Nesterov")
         optim = torch.optim.SGD(OCR_model.parameters(), nesterov=True, lr=args.lr, momentum=0.9, weight_decay=5e-4)
@@ -119,11 +112,9 @@ def main():
     
     # train the model
     print("Beginning Training...")
-    best_acc = 0
-    for epoch in range(args.epochs):
+    for epoch in range(start, start+args.epochs):
         trainOCR(OCR_model, epoch, train_loader, optim, device, criterion)
-        testOCR(OCR_model, epoch, test_loader, best_acc, device, criterion)
-        optim.step()
+        testOCR(OCR_model, epoch, test_loader, device, criterion, args.optim)
 
 
 if __name__ == '__main__':
