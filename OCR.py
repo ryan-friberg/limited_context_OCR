@@ -5,7 +5,7 @@ import torch.backends.cudnn as cudnn
 from torchvision import transforms
 import argparse
 from torchvision.io import read_image
-# import torchsummary
+import torchsummary
 from model import label_map
 
 from datasets import OCRDataSet, collate_fn
@@ -35,7 +35,7 @@ def main():
 
     # define ResNet model
     OCR_model = OCRResNet()
-    # torchsummary.summary(OCR_model, (3, 64, 64))
+    torchsummary.summary(OCR_model, (3, 64, 64))
 
     # check if requested GPU is available
     print("==> Configuring device...")
@@ -101,9 +101,9 @@ def main():
     
     # train the model
     print("Beginning Training...")
-    for epoch in range(start, start+args.epochs):
-        trainOCR(OCR_model, epoch, train_loader, optim, device, criterion)
-        testOCR(OCR_model, epoch, test_loader, device, criterion, args.optim)
+    # for epoch in range(start, start+args.epochs):
+    #     trainOCR(OCR_model, epoch, train_loader, optim, device, criterion)
+    #     testOCR(OCR_model, epoch, test_loader, device, criterion, args.optim)
 
 
 if __name__ == '__main__':

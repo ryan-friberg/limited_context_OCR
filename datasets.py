@@ -61,16 +61,17 @@ class OCRDataSet(Dataset):
 
 
 class MultiDataSet():
-    def __init__(self, images_dir, transforms):
-        self.image_transforms = transforms
+    def __init__(self, images_dir):
         image_files = self.get_image_filenames_with_labels(images_dir)       
         self.image_files = np.array(image_files)
         self.num_images = len(self.image_files)
         
     def __getitem__(self, idx):
         try:
+            # print(self.image_files[idx])
             img = Image.open(self.image_files[idx]).convert('RGB')
-            return self.image_transforms(img)
+            # print(img.size)
+            return img
         except:
             return None
         

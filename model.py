@@ -24,20 +24,22 @@ label_map = {1: "0", 2: "1", 3: "2", 4: "3", 5: "4",
                 61: "y", 62: "z"}
 
 class Extractor():
-    def __init__(self, label_map, out_shape):
+    def __init__(self, out_shape, label_map, transforms):
         self.label_map = label_map
         self.out_shape = out_shape
+        self.transforms = transforms
 
     # use Google Tesseract to extrapolate bounding boxes around each character in an image
     # Tesseract also supplies its guess for the character in the box, which is used as a pseudo-label
     # system within the OCR pipeline
-    def forward(self, img_name):
+    def forward(self, img):
         labels, imgs = [], []
-        img = Image.open(img_name)
+        # img = Image.open(img_name)
+ 
         wImg, hImg = img.size
         boxes = pytesseract.image_to_boxes(img)
         if len(boxes) == 0:
-            return
+            return labels, imgs
         
         # extract the coordinates of the each bounding box found in the image
         for box in boxes.splitlines():
@@ -49,13 +51,9 @@ class Extractor():
             cropped = img.crop((x, hImg-h, w, hImg-y))
             w2, h2 = cropped.size
 
-            # add some white pixel padding around the image
-            padded = Image.new(cropped.mode, (w2+10, h2+10), (255, 255, 255))
-            padded.paste(cropped, (5,5))
-
             # match the output shape to the expected input shape of the OCRResNet
-            char_img = padded.resize((self.out_shape, self.out_shape))
-            imgs.append(char_img)
+            char_img = cropped.resize((self.out_shape, self.out_shape))
+            imgs.append(self.transforms(char_img))
         return labels, imgs
 
 ## simple implementation of a residual network
@@ -98,14 +96,14 @@ class OCRResNet(nn.Module):
                                     Block(256, 256, 1))
         self.block3 = nn.Sequential(Block(128, 512, 2))
         self.pool   = nn.AvgPool2d(8)
-        self.linear = nn.Linear(4096, num_classes)
+        self.linear = nn.Linear(2048, num_classes)
         
         self.layers = nn.Sequential(self.conv, self.block1, self.block2, 
                                     self.block3, self.pool)
 
     def forward(self, input):
         output = self.layers(input)
-        return output.view(output.size(0), -1)
+        return self.linear(output.view(output.size(0), -1))
 
 
 def trainOCR(model, epoch, trainloader, optim, device, criterion):
@@ -119,18 +117,18 @@ def trainOCR(model, epoch, trainloader, optim, device, criterion):
         inputs, labels = inputs.to(device), labels.to(device)
         optim.zero_grad()
         outputs = model(inputs)
-        
+        labels -= 1
         loss = criterion(outputs, labels)
         loss.backward()
         optim.step()
 
         train_loss += loss.item()
-        _, preds = torch.max(outputs, 1)
+        _, predicted = outputs.max(1)
         total += labels.size(0)
-        correct += torch.sum(preds == labels.data)
+        correct += predicted.eq(labels).sum().item()
     end = time.perf_counter()
     print("Training", epoch, "time: %.3f" % (end-start), 'Loss: %.3f Acc: %.3f (%d/%d)' % 
-          (train_loss/(batch_idx+1), correct/total, correct, total))
+         (train_loss/(batch_idx+1), correct/total, correct, total))
 
 def testOCR(model, epoch, testloader, device, criterion, optim_name):
     print("\nTesting...") 
@@ -142,17 +140,18 @@ def testOCR(model, epoch, testloader, device, criterion, optim_name):
         for batch_idx, (inputs, labels) in enumerate(testloader):
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
+            labels -= 1
             loss = criterion(outputs, labels)
 
             test_loss += loss.item()
-            _, preds = torch.max(outputs, 1)
+            _, predicted = outputs.max(1)
             total += labels.size(0)
-            correct += torch.sum(preds == labels.data)
+            correct += predicted.eq(labels).sum().item()
 
         print('Test Loss: %.3f Acc: %.3f (%d/%d)' % (test_loss/(batch_idx+1), correct/total, correct, total))
         print('Saving model...')
         state = {'model': model.state_dict(), 'acc': 100.*correct/total, 'epoch': epoch}
         if not os.path.isdir('model_checkpoint'):
             os.mkdir('model_checkpoint')
-        checkpoint_name = optim_name + 'chpkt' + str(epoch) + '.pth'
+        checkpoint_name = "model_checkpoint/transformed_" + optim_name + 'chpkt' + str(epoch) + '.pth'
         torch.save(state, checkpoint_name)
